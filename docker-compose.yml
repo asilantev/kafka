@@ -1,0 +1,68 @@
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+    networks:
+      - kafka_network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - 29092:29092
+    hostname: kafka
+    networks:
+      - kafka_network
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui
+    container_name: kafka-ui
+    ports:
+      - 8082:8080
+    restart: always
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+    links:
+      - kafka
+      - zookeeper
+    networks:
+      - kafka_network
+
+  kafka-setup:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - kafka
+    networks:
+      - kafka_network
+    command: >
+      bash -c "
+        echo Waiting for Kafka to be ready...
+        cub kafka-ready -b kafka:29092 1 30
+        echo Creating topics...
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic ConditionType
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic SmartLink
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic RedirectRule
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1 --topic RuleCondition
+        echo Topics created.
+      "
+networks:
+  kafka_network:
+    name: kafka_network
+    driver: bridge
